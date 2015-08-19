@@ -249,11 +249,11 @@ labels_test[1]
 #best to diagnose it with no luck. But I believe if you run it in your R studio
 #console it should work. Appreciate any input you might have on this issue.
 #########
-# for (i in seq(1, 2500)) { 
-#   if (labels_test[i] == predictions[i]) { 
-#   good = good + 1 
-#    } 
-#  }
+for (i in seq(1, 2500)) { 
+  if (labels_test[i] == predictions[i]) { 
+  good = good + 1 
+   } 
+ }
 good # 1465
 good/2500 # 0.586
 ```
@@ -299,22 +299,22 @@ prediction_pca = foreach(j=1:1000, .combine='rbind') %do% {
 #best to diagnose it with no luck. But I believe if you run it in your R studio
 #console it should work. Appreciate any input you might have on this issue.
 #########
-# labels_test = labels[2501:5000]
-# labels_test[1]
-# prediction_pca[1]
-# accuracy_pca = foreach(j=1:1000, .combine='c') %do% {
-#   if (prediction_pca[j] == labels_test[j]) {
-#     result = TRUE
-#   }
-#   else {
-#     result = FALSE
-#   }
-#   result
-# }
-# accuracy[accuracy == TRUE] = 1
-# accuracy[accuracy == FALSE] = 0
-# 
-# sum(accuracy_pca) # 2
+labels_test = labels[2501:5000]
+labels_test[1]
+prediction_pca[1]
+accuracy_pca = foreach(j=1:1000, .combine='c') %do% {
+  if (prediction_pca[j] == labels_test[j]) {
+    result = TRUE
+  }
+  else {
+    result = FALSE
+  }
+  result
+}
+accuracy[accuracy == TRUE] = 1
+accuracy[accuracy == FALSE] = 0
+
+sum(accuracy_pca) # 2
 ```
 The conclusion is that Naive Bayes works much better than PCA in this scenario.
 
