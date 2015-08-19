@@ -1,0 +1,349 @@
+---
+title: "Homework 2"
+author: "Qijing Zhang"
+date: "August 14, 2015"
+output: pdf_document
+---
+
+# ABIA airport
+### Look at how 2008 financial crisis affected airline industry, reflected in ABIA flights
+Airline industry is known to be sensitive to business cycle, aka lower growth in economic downturn and contraction.  
+```{r}
+options(warn=-1)
+library(doBy)
+library(ggplot2)
+library(plyr)
+setwd('/Users/vickyzhang/Documents/MSBA/predictive2/hw2')
+abia = read.csv("../STA380/data/ABIA.csv", header=TRUE)
+summary(abia)
+# get the count of flights, grouped by month
+flight_by_month = summaryBy(FlightNum~Month, data=abia, FUN = length )
+flight_by_month
+# tried to put scale_x_continuous() on the 3rd line so that it can be fully shown in pdf. 
+# But R throws an error! I don't understand why putting an argument on a new line would cause this.
+ggplot(flight_by_month, aes(x=Month, y=FlightNum.length)) + geom_line(stat="identity") + 
+  labs(x="Month", y="# Flights") + labs(title = "# of flights by month") + scale_x_continuous(breaks=1:12)
+```
+There is an obvious decrease in number of flights since September, which is consistent with the time of financial crisis. It even affected the holiday season - usually the number of flights in December should be higher but it's lower than the other months.  
+### How many flights did ABIA lose?
+```{r}
+# on average, per month
+mean(flight_by_month[c(1:8), 'FlightNum.length']) - mean(flight_by_month[c(9:12), 'FlightNum.length'])
+# for all 4 months
+(mean(flight_by_month[c(1:8), 'FlightNum.length']) - mean(flight_by_month[c(9:12), 'FlightNum.length']))*4
+```
+ABIA lost 5524 flights from Sept - Dec 2008, compared with the average level of the rest of the year.
+### Does financial crisis affect on-time arrival?
+```{r}
+# look at delay of departure flights
+abia_dpt = abia[abia$Origin == 'AUS',]
+# get arrival delay by month
+dpt_delay_by_month = summaryBy(ArrDelay~Month, data=abia_dpt, FUN = function(x) c(m = mean(x, na.rm=TRUE)))
+dpt_delay_by_month
+ggplot(dpt_delay_by_month, aes(x=Month, y=ArrDelay.m)) + geom_line(stat="identity") + 
+  labs(x="Month", y="Departure delay in minutes") + labs(title = "Departure delay by month") 
+  + scale_x_continuous(breaks=1:12)
+```
+There are two peaks in this graph, March and June, which are both end of quarter, reflecting seasonality of airline industry.  
+In September, October and November, arrival delay actually dropped to a very low level. Maybe it's because there are fewer flights. In December, arrival delay jumped up again, probably related to holiday season. It's easy to draw correlations here, but hard to prove causality.  
+```{r}
+# look at delay of arrival flights
+abia_arr = abia[abia$Dest == 'AUS',]
+# get arrival delay by month
+arr_delay_by_month = summaryBy(ArrDelay~Month, data=abia_arr, FUN = function(x) c(m = mean(x, na.rm=TRUE)))
+arr_delay_by_month
+ggplot(arr_delay_by_month, aes(x=Month, y=ArrDelay.m)) + geom_line(stat="identity") + 
+  labs(x="Month", y="Arrival delay in minutes") + labs(title = "Arrival delay by month") 
+  + scale_x_continuous(breaks=1:12)
+```
+The pattern is similar to departure flights; peak in March and June, affected by financial crisis in Sept, Oct and Nov, picks up in Dec.  
+
+
+### Does financial crisis affect flight cancellation rate?
+```{r}
+# get arrival cancellation rate by month
+cancel_by_month = summaryBy(Cancelled~Month, data=abia, FUN = length)
+dpt_cancel_by_month = summaryBy(Cancelled~Month, data=abia_dpt, FUN = length)
+# set up the new df from old df, in order to preserve 'month' column
+dpt_cancel_rate = dpt_cancel_by_month
+dpt_cancel_rate$pct= dpt_cancel_by_month[,2] / cancel_by_month[,2]
+ggplot(dpt_cancel_rate, aes(x=Month, y=pct)) + geom_line(stat="identity") + 
+  labs(x="Month", y="cancellation rate") + labs(title = "cancellation rate by month") 
+  + scale_x_continuous(breaks=1:12)
+```
+In terms of cancellation rate, post-crisis rate is higher than pre-crisis rate, especially in September and October when it just hit.  
+
+### What is the best time of day to fly to minimize delays?
+```{r}
+# get average minutes of departure delay by scheduled departure time (by hour)
+library(stringr)
+# get the hour first, doing some string manipulation on CRSDepTime
+abia$hour = lapply(abia$CRSDepTime, FUN = function(x) substr(str_pad(x, width = 4, pad = 0), 1, 2))
+abia <- as.data.frame(lapply(abia, unlist))
+dpt_delay_by_hr = summaryBy(DepDelay~hour, data=abia, FUN = function(x) c(m = mean(x, na.rm=TRUE)))
+ggplot(dpt_delay_by_hr, aes(x=hour, y=DepDelay.m, group = 1)) + geom_line(stat="identity") + 
+  labs(x="hour", y="minutes of delay") + labs(title = "departure delay by hour")
+```
+The best time to depart is 6 am and 5 am. They have around 0 minutes of departure delay.Worst time is around 12 am, which has more than 20 min of delay.
+### What is the best time of year to fly to minimize delays?
+```{r}
+# set up a new column having month and day of month
+attach(abia)
+abia$date = paste(str_pad(Month, width = 2, pad = 0), str_pad(DayofMonth, width = 2, pad = 0), sep='')
+dpt_delay_by_date = summaryBy(DepDelay~date, data=abia, FUN = function(x) c(m = mean(x, na.rm=TRUE)))
+abia <- within(abia, date <- factor(date))
+# bug here. did get to display x axis tick labels. How to do this??????????
+ggplot(dpt_delay_by_date, aes(x=date, y=DepDelay.m, group = 1)) + geom_line(stat="identity") + 
+  labs(x="hour", y="minutes of delay") + labs(title = "departure delay by hour") 
+  + scale_x_discrete(breaks = 0:23, limits=dpt_delay_by_date$date)
+```
+
+### How do patterns of flights to different destinations or parts of the country change over the course of the year?
+```{r}
+airports <- read.csv('https://raw.githubusercontent.com/plotly/datasets/master/2011_february_us_airport_traffic.csv')
+library(rworldmap)
+
+newmap <- getMap(resolution = "low")
+plot(newmap, xlim = c(-125, -70), ylim = c(40, 45), asp = 1)
+points(airports$long, airports$lat, col = "red", cex = .6)
+x0=40.65236
+y0=-75.44040
+x1= 30.19453
+y1= -97.66987
+b1 = (y1-y0)/(x1-x0)
+a1 = y1 - b1 * x1
+abline(v=-90)
+lines(x=c(x1, x0), y=c(y1, y0), col='red')
+abline(a=230, b=2.12, untf = FALSE)
+abline(h=c(-20,20),lty=2,col='grey')
+segments(x0=40.65236, y0=-75.44040, x1= 30.19453, y1= -97.66987, col='red')
+
+library(ggmap)
+library(mapproj)
+map <- qmap(location = 'USA', zoom = 4)
+# map + geom_point(aes(x = long, y = lat), data = airports, size=merged$Month.length)
+# colnames(airports)[1] = 'Dest'
+# merged = merge(airport_by_popular, airports, by='Dest', all.y=TRUE)
+# plot_ly(df, lat = lat, lon = long, text = hover, color = cnt,
+#         type = 'scattergeo', locationmode = 'USA-states', mode = 'markers',
+#         marker = m, filename="r-docs/us-airports") %>%
+#   layout(title = 'Most trafficked US airports<br>(Hover for airport)', geo = g)
+
+```
+Got stuck with plotting. start over with just numerical analysis.  
+```{r}
+# the most popular destination airports
+airport_by_popular = summaryBy(Month~Month+Dest, data=abia, FUN = length)
+# get the top 10 most popular airports by month
+library(foreach)
+results = foreach(i = 1:12, .combine='c') %do% {
+  rank_of_month = airport_by_popular[airport_by_popular$Month == i,]
+  rank_of_month = rank_of_month[order(-rank_of_month$Month.length),]
+  rank_of_month = rank_of_month[1:10,]
+}
+results = data.frame(results)
+```
+
+# author attribution
+```{r}
+library(knitr)
+library(doBy)
+library(ggplot2)
+library(plyr)
+library(XML)
+library(foreach)
+# Some helper functions
+library(tm) 
+readerPlain = function(fname){
+				readPlain(elem=list(content=readLines(fname)), 
+							id=fname, language='en') }
+# # get list of authors
+author_dirs = Sys.glob('../data/ReutersC50/C50train/*')
+author_dirs = lapply(author_dirs, function(x){substring(x, first=29)}) 
+
+
+### get test articles from both test and training directory, do all the pre processing steps
+setwd('/Users/vickyzhang/Documents/MSBA/predictive2/STA380/R')
+# spend lots of time fixing a bug here because working dir in R console and R markdown Console are diff!!
+test_dirs = Sys.glob(c('../data/ReutersC50/C50tests/*', '../data/ReutersC50/C50train/*'))
+file_list = NULL
+labels = NULL
+for(author in test_dirs) {
+	author_name = substring(author, first=29)
+	files_to_add = Sys.glob(paste0(author, '/*.txt'))
+	file_list = append(file_list, files_to_add)
+	labels = append(labels, rep(author_name, length(files_to_add)))
+}
+head(labels)
+# Need a more clever regex to get better names here
+all_docs = lapply(file_list, readerPlain) 
+names(all_docs) = file_list
+names(all_docs) = sub('.txt', '', names(all_docs))
+
+my_corpus = Corpus(VectorSource(all_docs))
+names(my_corpus) = file_list
+
+# Preprocessing, tokenization, data cleaning
+my_corpus = tm_map(my_corpus, content_transformer(tolower)) # make everything lowercase
+my_corpus = tm_map(my_corpus, content_transformer(removeNumbers)) # remove numbers
+my_corpus = tm_map(my_corpus, content_transformer(removePunctuation)) # remove punctuation
+my_corpus = tm_map(my_corpus, content_transformer(stripWhitespace)) ## remove excess white-space
+my_corpus = tm_map(my_corpus, content_transformer(removeWords), stopwords("SMART"))
+
+DTM = DocumentTermMatrix(my_corpus)
+DTM # some basic summary statistics
+class(DTM)  # a special kind of sparse matrix format
+
+## You can inspect its entries...
+#inspect(DTM[1:10,1:20])
+DTM = removeSparseTerms(DTM, 0.975) # remove those that are 0 in 97.5% of the docs or more
+DTM
+# Now a dense matrix
+Z = as.matrix(DTM) # Y is test data matrix
+#print(dim(Z))
+
+# get prob for training
+smooth_count = 1/2500
+X = Z[1:2500,]
+prob = foreach(i = 1:50, .combine='rbind') %do% {
+  AP_train = X[(1+50*(i-1)):(50*i),] # be careful about dimensions, always specify both rows and col!
+  w_AP = colSums(AP_train + smooth_count)
+  w_AP = w_AP/sum(w_AP)
+}
+dim(prob)
+
+smooth_count = 1/2500
+
+```
+
+```{r}
+
+
+
+# have to remember the dot before combine argument, otherwise... it won't run
+cols = colnames(prob)
+Y = Z[2501:5000,]
+predictions = foreach(j=1:2500, .combine='rbind') %do% {
+  y_test = Y[j,]
+  
+  logprob = foreach(i = 1:50, .combine='rbind') %do% {
+    sum(y_test*log(prob[i,]))
+  }
+  
+  # set the list of authors as row names of logprob
+  rownames(logprob) = author_dirs
+  logprob = t(logprob)
+  # get the predicted author
+  y_predict = names(logprob[,logprob == max(logprob)])
+}
+```
+
+```{r}
+good = 0
+head(labels)
+labels_test = labels[2501:5000]
+labels_test[1]
+### NOTE TO PROFESSOR: For whatever reason, this code block can be run in
+#console, but breaks every time I try to knit it. I will just put results from
+#the console in comments. I'm not sure why it's behaving like that. I tried my
+#best to diagnose it with no luck. But I believe if you run it in your R studio
+#console it should work. Appreciate any input you might have on this issue.
+#########
+# for (i in seq(1, 2500)) { 
+#   if (labels_test[i] == predictions[i]) { 
+#   good = good + 1 
+#    } 
+#  }
+good # 1465
+good/2500 # 0.586
+```
+So it doesn't work very well. Try PCA.
+
+```{r}
+# each row is the PCA of an author
+X = Z[1:2500,]
+Y = Z[2501:4000,]
+pca_all_author = foreach(j=1:50, .combine='rbind') %do% {
+
+  corpus = X[j:(j+49),] # don't forget the bracket around j+49
+  corpus = corpus/rowSums(corpus)
+  # all prepared. run PCA!
+  pca_author = prcomp(corpus, scale=FALSE)
+  pca_author = pca_author$rotation[order(abs(pca_author$rotation[,1]),decreasing=TRUE),1]
+}
+pca_all_author[,pca_all_author=0] = 0.00000001
+rownames(pca_all_author) = author_dirs
+
+prediction_pca = foreach(j=1:1000, .combine='rbind') %do% {
+  y_test = Y[j,]
+
+  # for each article in test set, get the inner products, get the predicted author, put into a list
+  logprob = foreach(i = 1:50, .combine='rbind') %do% {
+    product = y_test*log(pca_all_author[i,])
+    product[product == -Inf] = 0.0000001
+    sum(product, na.rm = TRUE)
+  }
+  
+  # set the list of authors as row names of logprob
+  rownames(logprob) = author_dirs
+  logprob = t(logprob)
+  # get the predicted author
+  y_predict = names(logprob[,logprob == max(logprob)])
+}
+```
+
+```{r}
+### NOTE TO PROFESSOR: For whatever reason, this code block can be run in
+#console, but breaks every time I try to knit it. I will just put results from
+#the console in comments. I'm not sure why it's behaving like that. I tried my
+#best to diagnose it with no luck. But I believe if you run it in your R studio
+#console it should work. Appreciate any input you might have on this issue.
+#########
+# labels_test = labels[2501:5000]
+# labels_test[1]
+# prediction_pca[1]
+# accuracy_pca = foreach(j=1:1000, .combine='c') %do% {
+#   if (prediction_pca[j] == labels_test[j]) {
+#     result = TRUE
+#   }
+#   else {
+#     result = FALSE
+#   }
+#   result
+# }
+# accuracy[accuracy == TRUE] = 1
+# accuracy[accuracy == FALSE] = 0
+# 
+# sum(accuracy_pca) # 2
+```
+The conclusion is that Naive Bayes works much better than PCA in this scenario.
+
+# Grocery basket
+```{r}
+library(arules)  # has a big ecosystem of packages built around it
+
+# Read in grocery from users
+setwd('/Users/vickyzhang/Documents/MSBA/predictive2/hw2')
+grocery <- read.transactions("../STA380/data/groceries.txt", rm.duplicates = TRUE, sep = ',', 
+                             format = 'basket')
+
+# Now run the 'apriori' algorithm Look at rules with support > .01 & confidence
+# >.5 & length (# artists) <= 4. I chose confidence=.5 because 0.5 is the
+# highest level of confidence achieved; if confidence is raised 0.6, the result
+# will be null. Also, even if I lower the confidence to 0.3, the rhs more or
+# less look the same as confidence = 0.5
+groceryrules <- apriori(grocery, 
+	parameter=list(support=0.01, confidence=0.5, maxlen=4))
+                         
+# Look at the output
+inspect(groceryrules) #### what's up with so many empty stuff????? 
+# it's not very informative other than 'this customer didn't buy more than 4 items'
+
+## Choose a subset
+inspect(subset(groceryrules, subset=lift > 2)) 
+inspect(subset(groceryrules, subset=confidence > 0.5))
+inspect(subset(groceryrules, subset=support > .02 & confidence > 0.5))
+
+```
+Generally, those who buy groceries buy whole milk and other vegetables. These two items have the biggest support and confidence. 
+The one with highest support and confidence is {other vegetables,yogurt} => {whole milk}. So if people buy both yogurt and vegetables, they tend to buy whole milk too.
